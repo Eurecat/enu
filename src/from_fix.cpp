@@ -114,7 +114,7 @@ static void handle_fix(const sensor_msgs::NavSatFixConstPtr fix_ptr,
 
     if(!first_transform)
     {
-      ROS_ERROR_STREAM("ENU: Not tf avalable from" <<  sensor_frame_id << "to " << robot_frame_id);
+      ROS_ERROR_STREAM("ENU: Not tf avalable from " <<  sensor_frame_id << " to " << robot_frame_id);
       return;
     }
   }
