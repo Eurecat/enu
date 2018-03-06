@@ -44,6 +44,14 @@
 #include "enu/enu.h"  // ROS wrapper for conversion functions
 
 
+//msoler {
+#include "geometry_msgs/Point.h"
+#include <tf/transform_broadcaster.h>
+#include <tf/transform_listener.h>
+//}
+
+bool first_transform = false;
+
 void initialize_datum(const sensor_msgs::NavSatFix& fix,
                       const ros::Publisher& pub_datum,
                       sensor_msgs::NavSatFix* datum_ptr) {
@@ -75,6 +83,8 @@ static void handle_fix(const sensor_msgs::NavSatFixConstPtr fix_ptr,
                        const ros::Publisher& pub_odom,
                        const ros::Publisher& pub_datum,
                        const std::string& output_tf_frame,
+                       const std::string& robot_frame_id,
+                       const std::string& sensor_frame_id,
                        const double invalid_covariance_value,
                        const double scale_covariance,
                        const double lock_altitude) {
@@ -89,13 +99,48 @@ static void handle_fix(const sensor_msgs::NavSatFixConstPtr fix_ptr,
   // Convert the input latlon into north-east-down (NED) via an ECEF
   // transformation and an ECEF-formatted datum point
   nav_msgs::Odometry odom;
-  enu::fix_to_point(*fix_ptr, datum, &odom.pose.pose.position);
+  geometry_msgs::Point gps_pos_sensor_frame;
+  enu::fix_to_point(*fix_ptr, datum, &gps_pos_sensor_frame);
   if (lock_altitude!=-1) 
-    odom.pose.pose.position.z = lock_altitude;
+   gps_pos_sensor_frame.z = lock_altitude;
+
+  // msoler from antenna frame to baselink {
+  tf::TransformListener listener;
+  tf::StampedTransform transform;
+
+  if(!first_transform)
+  {
+    first_transform = listener.waitForTransform(robot_frame_id, sensor_frame_id, ros::Time(0), ros::Duration(1.0));
+
+    if(!first_transform)
+    {
+      ROS_ERROR_STREAM("ENU: Not tf avalable from" <<  sensor_frame_id << "to " << robot_frame_id);
+      return;
+    }
+  }
+
+  try {
+    listener.lookupTransform( robot_frame_id, sensor_frame_id, ros::Time(0), transform);
+  }
+
+  catch (tf::TransformException ex)
+  {
+    ROS_ERROR("%s",ex.what());
+    first_transform=false;
+    return;
+  }
+
+  tf::Vector3 p( gps_pos_sensor_frame.x, gps_pos_sensor_frame.y, gps_pos_sensor_frame.z );
+  tf::Vector3  gps_tf_robot_frame = transform * p; //transform to robot frame
+
+  odom.pose.pose.position.x = gps_tf_robot_frame.x();
+  odom.pose.pose.position.y = gps_tf_robot_frame.y();
+  odom.pose.pose.position.z = gps_tf_robot_frame.z();
+  // } msoler
 
   odom.header.stamp = fix_ptr->header.stamp;
   odom.header.frame_id = output_tf_frame;  // Name of output tf frame
-  odom.child_frame_id = fix_ptr->header.frame_id;  // Antenna location
+  odom.child_frame_id = robot_frame_id;  // robot frame id (already tranformed)
 
   //Initialize orientation to zero (GPS orientation is N/A)
   odom.pose.pose.orientation.x = 0;
@@ -130,7 +175,14 @@ int main(int argc, char **argv) {
   ros::NodeHandle pnh("~");
 
   std::string output_tf_frame;
-  pnh.param<std::string>("output_frame_id", output_tf_frame, "map");
+  pnh.param<std::string>("output_frame_id", output_tf_frame, "odom");
+
+  // msoler {
+  std::string sensor_frame_id, robot_frame_id;
+  pnh.param<std::string>("robot_frame_id", robot_frame_id, "base_link");
+  pnh.param<std::string>("sensor_frame_id", sensor_frame_id, "gps");
+  // }
+
   double invalid_covariance_value;
   double scale_covariance;
   double lock_altitude;
@@ -143,7 +195,7 @@ int main(int argc, char **argv) {
   ros::Publisher pub_odom = n.advertise<nav_msgs::Odometry>("enu", 5);
   ros::Publisher pub_datum = n.advertise<sensor_msgs::NavSatFix>("enu_datum", 5, true);
   ros::Subscriber sub = n.subscribe<sensor_msgs::NavSatFix>("fix", 5,
-      boost::bind(handle_fix, _1, pub_odom, pub_datum, output_tf_frame, invalid_covariance_value,scale_covariance, lock_altitude));
+      boost::bind(handle_fix, _1, pub_odom, pub_datum, output_tf_frame, robot_frame_id, sensor_frame_id, invalid_covariance_value,scale_covariance, lock_altitude));
   ros::ServiceServer srv = n.advertiseService<enu::ToENU::Request, enu::ToENU::Response> ("ToENU", toENUService);
 
   ros::spin();

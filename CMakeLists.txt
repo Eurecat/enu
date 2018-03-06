@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(enu)
 
-find_package(catkin REQUIRED COMPONENTS rosconsole roscpp geometry_msgs sensor_msgs nav_msgs)
+find_package(catkin REQUIRED COMPONENTS rosconsole roscpp geometry_msgs tf sensor_msgs nav_msgs)
+
+set (CMAKE_CXX_STANDARD 11)
 
 add_service_files(
   FILES
@@ -15,7 +17,7 @@ generate_messages(DEPENDENCIES sensor_msgs geometry_msgs)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES enu 
-  CATKIN_DEPENDS rosconsole roscpp geometry_msgs sensor_msgs nav_msgs
+  CATKIN_DEPENDS rosconsole roscpp geometry_msgs tf sensor_msgs nav_msgs
 )
 
 find_library(SWIFTNAV swiftnav)

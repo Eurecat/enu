@@ -1,3 +1,8 @@
 This repo is a ROS package providing transformations back and forth between NavSatFix and popular cartesian representations. It is a light ROS wrapper on libswiftnav.
 
 Please find documentation on the ROS wiki: http://ros.org/wiki/enu
+
+
+Eurecat contribution:
+
+Added convertion of tf between robot frame and sensor frame in enu form fix.
