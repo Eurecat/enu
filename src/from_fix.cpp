@@ -45,12 +45,14 @@
 
 
 //msoler {
+#include "sensor_msgs/Imu.h"
 #include "geometry_msgs/Point.h"
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
-//}
 
-bool first_transform = false;
+ros::Subscriber imu_sub;
+sensor_msgs::ImuConstPtr imu_curr_ptr;
+//}
 
 void initialize_datum(const sensor_msgs::NavSatFix& fix,
                       const ros::Publisher& pub_datum,
@@ -79,6 +81,14 @@ void initialize_datum(const sensor_msgs::NavSatFix& fix,
 }
 
 
+static void imu_callback(const sensor_msgs::ImuConstPtr imu_msg)
+{
+  imu_curr_ptr = imu_msg;
+}
+
+
+
+
 static void handle_fix(const sensor_msgs::NavSatFixConstPtr fix_ptr,
                        const ros::Publisher& pub_odom,
                        const ros::Publisher& pub_datum,
@@ -105,33 +115,43 @@ static void handle_fix(const sensor_msgs::NavSatFixConstPtr fix_ptr,
    gps_pos_sensor_frame.z = lock_altitude;
 
   // msoler from antenna frame to baselink {
-  tf::TransformListener listener;
-  tf::StampedTransform transform;
+  static bool transform_found = false;
+  static tf::TransformListener listener;
+  static tf::StampedTransform sensor_to_base, base_to_map_orientation;
 
-  if(!first_transform)
+  if(!transform_found)
   {
-    first_transform = listener.waitForTransform(robot_frame_id, sensor_frame_id, ros::Time(0), ros::Duration(1.0));
-
-    if(!first_transform)
+    listener.waitForTransform(robot_frame_id, sensor_frame_id, ros::Time(0), ros::Duration(1.0));
+    //  {
+    try
     {
-      ROS_ERROR_STREAM("ENU: Not tf avalable from " <<  sensor_frame_id << " to " << robot_frame_id);
+      listener.lookupTransform( robot_frame_id, sensor_frame_id, ros::Time(0), sensor_to_base);
+      transform_found=true;
+    }
+
+    catch (tf::TransformException ex)
+    {
+      ROS_ERROR("%s",ex.what());
+      transform_found=false;
       return;
     }
   }
 
-  try {
-    listener.lookupTransform( robot_frame_id, sensor_frame_id, ros::Time(0), transform);
-  }
-
-  catch (tf::TransformException ex)
+  if(imu_curr_ptr)
   {
-    ROS_ERROR("%s",ex.what());
-    first_transform=false;
-    return;
+    tf::Quaternion q;
+    tf::quaternionMsgToTF(imu_curr_ptr->orientation, q);
+    tf::Matrix3x3 m(q);
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+    base_to_map_orientation.setRotation( tf::createQuaternionFromYaw(yaw));
+    base_to_map_orientation.setOrigin( {0,0,0} );
   }
 
   tf::Vector3 p( gps_pos_sensor_frame.x, gps_pos_sensor_frame.y, gps_pos_sensor_frame.z );
-  tf::Vector3  gps_tf_robot_frame = transform * p; //transform to robot frame
+
+  //transform to map frame
+  tf::Vector3  gps_tf_robot_frame = base_to_map_orientation * sensor_to_base * p;
 
   odom.pose.pose.position.x = gps_tf_robot_frame.x();
   odom.pose.pose.position.y = gps_tf_robot_frame.y();
@@ -196,8 +216,11 @@ int main(int argc, char **argv) {
   ros::Publisher pub_datum = n.advertise<sensor_msgs::NavSatFix>("enu_datum", 5, true);
   ros::Subscriber sub = n.subscribe<sensor_msgs::NavSatFix>("fix", 5,
       boost::bind(handle_fix, _1, pub_odom, pub_datum, output_tf_frame, robot_frame_id, sensor_frame_id, invalid_covariance_value,scale_covariance, lock_altitude));
+
+  imu_sub = n.subscribe<sensor_msgs::Imu>("imu/data", 10, imu_callback);
   ros::ServiceServer srv = n.advertiseService<enu::ToENU::Request, enu::ToENU::Response> ("ToENU", toENUService);
 
+  // modificar a 10 hz o així
   ros::spin();
   return 0;
 }
