@@ -137,25 +137,34 @@ static void handle_fix(const sensor_msgs::NavSatFixConstPtr fix_ptr,
     }
   }
 
+  double roll, pitch, yaw;
   if(imu_curr_ptr)
   {
     tf::Quaternion q;
     tf::quaternionMsgToTF(imu_curr_ptr->orientation, q);
     tf::Matrix3x3 m(q);
-    double roll, pitch, yaw;
     m.getRPY(roll, pitch, yaw);
-    base_to_map_orientation.setRotation( tf::createQuaternionFromYaw(yaw));
-    base_to_map_orientation.setOrigin( {0,0,0} );
+  }
+  else
+  {
+    ROS_ERROR("No Imu data skipping....");
+    return;
   }
 
-  tf::Vector3 p( gps_pos_sensor_frame.x, gps_pos_sensor_frame.y, gps_pos_sensor_frame.z );
-
   //transform to map frame
-  tf::Vector3  gps_tf_robot_frame = base_to_map_orientation * sensor_to_base * p;
+  //tf::Vector3 p( gps_pos_sensor_frame.x, gps_pos_sensor_frame.y, gps_pos_sensor_frame.z );
+  //tf::Vector3  gps_tf_robot_frame = sensor_to_base * p;
 
-  odom.pose.pose.position.x = gps_tf_robot_frame.x();
-  odom.pose.pose.position.y = gps_tf_robot_frame.y();
-  odom.pose.pose.position.z = gps_tf_robot_frame.z();
+//  odom.pose.pose.position.x = gps_tf_robot_frame.x();
+//  odom.pose.pose.position.y = gps_tf_robot_frame.y();
+//  odom.pose.pose.position.z = gps_tf_robot_frame.z();
+
+  tf::Vector3 sensor_off = sensor_to_base.getOrigin();
+
+  ROS_DEBUG_STREAM("Heading is " << yaw*180/M_PI);
+  odom.pose.pose.position.x = gps_pos_sensor_frame.x + (sensor_off.x() * cos(yaw))  ;
+  odom.pose.pose.position.y = gps_pos_sensor_frame.y + (sensor_off.y() * sin(yaw)) ;
+  odom.pose.pose.position.z = gps_pos_sensor_frame.z;
   // } msoler
 
   odom.header.stamp = fix_ptr->header.stamp;

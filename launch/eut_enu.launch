@@ -1,11 +1,11 @@
 <launch>
-  <node pkg="enu" type="from_fix" name="fix_to_enu" clear_params="true">
+  <node pkg="enu" type="from_fix" name="fix_to_enu" output="screen" clear_params="true">
     <!--<param name="datum_latitude"  value="41.5"/>
     <param name="datum_longitude" value="2.14"/>
     <param name="datum_altitude"  value="142.0"/>-->
           
     
-    <param name="output_frame_id"  value="odom"/>
+    <param name="output_frame_id"  value="map"/>
     <param name="sensor_frame_id"  value="emlid"/>
     <param name="robot_frame_id"  value="base_link"/>
 
