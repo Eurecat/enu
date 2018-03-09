@@ -125,7 +125,7 @@ static void handle_fix(const sensor_msgs::NavSatFixConstPtr fix_ptr,
     //  {
     try
     {
-      listener.lookupTransform( robot_frame_id, sensor_frame_id, ros::Time(0), sensor_to_base);
+      listener.lookupTransform(robot_frame_id, sensor_frame_id, ros::Time(0), sensor_to_base);
       transform_found=true;
     }
 
@@ -161,9 +161,9 @@ static void handle_fix(const sensor_msgs::NavSatFixConstPtr fix_ptr,
 
   tf::Vector3 sensor_off = sensor_to_base.getOrigin();
 
-  ROS_DEBUG_STREAM("Heading is " << yaw*180/M_PI);
-  odom.pose.pose.position.x = gps_pos_sensor_frame.x + (sensor_off.x() * cos(yaw))  ;
-  odom.pose.pose.position.y = gps_pos_sensor_frame.y + (sensor_off.y() * sin(yaw)) ;
+  ROS_DEBUG_STREAM("sensor_to_base x :"<< sensor_off.x() << " y: " << sensor_off.y() << " Heading: " << yaw*180/M_PI);
+  odom.pose.pose.position.x = gps_pos_sensor_frame.x + (sensor_off.x() * cos(yaw) - sensor_off.y() * sin(yaw)) ;
+  odom.pose.pose.position.y = gps_pos_sensor_frame.y + (sensor_off.x() * sin(yaw) + sensor_off.y() * cos(yaw)) ;
   odom.pose.pose.position.z = gps_pos_sensor_frame.z;
   // } msoler
 
